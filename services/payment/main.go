@@ -9,14 +9,23 @@ import (
 	"log"
 
 	"order-system/internal/events"
+	"order-system/internal/obs"
 
 	"github.com/nats-io/nats.go/jetstream"
+	"go.opentelemetry.io/otel"
 )
 
 const declineAtQty = 5 // ponytail: fixed rule; real gateway call goes in charge()
 
 func main() {
 	ctx := context.Background()
+
+	if shutdown, err := obs.Init(ctx, "payment"); err != nil {
+		log.Printf("otel: %v", err)
+	} else {
+		defer shutdown(ctx)
+	}
+
 	js, err := events.Connect(ctx)
 	if err != nil {
 		log.Fatalf("nats: %v", err)
@@ -32,9 +41,11 @@ func main() {
 	}
 
 	if _, err := cons.Consume(func(msg jetstream.Msg) {
+		mctx, span := otel.Tracer("payment").Start(obs.Extract(context.Background(), msg), "payment.charge")
+		defer span.End()
 		var e events.InventoryReserved
 		json.Unmarshal(msg.Data(), &e)
-		charge(ctx, js, e)
+		charge(mctx, js, e)
 		msg.Ack()
 	}); err != nil {
 		log.Fatalf("consume: %v", err)
@@ -47,11 +58,11 @@ func main() {
 func charge(ctx context.Context, js jetstream.JetStream, e events.InventoryReserved) {
 	if e.Qty >= declineAtQty {
 		payload, _ := json.Marshal(events.PaymentFailed{OrderID: e.OrderID, Reason: "amount too high"})
-		js.Publish(ctx, events.SubjectPaymentFailed, payload)
+		obs.Publish(ctx, js, events.SubjectPaymentFailed, payload)
 		log.Printf("declined %s (qty %d)", e.OrderID, e.Qty)
 		return
 	}
 	payload, _ := json.Marshal(events.PaymentCompleted{OrderID: e.OrderID})
-	js.Publish(ctx, events.SubjectPaymentCompleted, payload)
+	obs.Publish(ctx, js, events.SubjectPaymentCompleted, payload)
 	log.Printf("charged %s -> completed", e.OrderID)
 }

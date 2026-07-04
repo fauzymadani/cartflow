@@ -14,11 +14,12 @@ spec:
         - name: gateway
           image: gateway
           env:
-            - { name: ORDER_URL, value: "http://order:8080" }
+            - { name: ORDER_ADDR, value: "order:9090" }
             - name: JWT_SECRET
               valueFrom: { secretKeyRef: { name: app, key: JWT_SECRET } }
             - { name: AUTH_USER, value: "demo" }
             - { name: AUTH_PASS, value: "demo" }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://jaeger:4318" }
           ports: [{ containerPort: 8080 }]
 ---
 apiVersion: v1
@@ -46,7 +47,8 @@ spec:
             - name: DATABASE_URL
               valueFrom: { secretKeyRef: { name: app, key: DATABASE_URL } }
             - { name: NATS_URL, value: "nats://nats:4222" }
-          ports: [{ containerPort: 8080 }]
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://jaeger:4318" }
+          ports: [{ containerPort: 9090 }]
 ---
 apiVersion: v1
 kind: Service
@@ -54,7 +56,7 @@ metadata:
   name: order
 spec:
   selector: { app: order }
-  ports: [{ port: 8080, targetPort: 8080 }]
+  ports: [{ port: 9090, targetPort: 9090 }]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -73,6 +75,7 @@ spec:
             - name: DATABASE_URL
               valueFrom: { secretKeyRef: { name: app, key: DATABASE_URL } }
             - { name: NATS_URL, value: "nats://nats:4222" }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://jaeger:4318" }
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -89,6 +92,7 @@ spec:
           image: payment
           env:
             - { name: NATS_URL, value: "nats://nats:4222" }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://jaeger:4318" }
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -105,3 +109,4 @@ spec:
           image: notification
           env:
             - { name: NATS_URL, value: "nats://nats:4222" }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://jaeger:4318" }

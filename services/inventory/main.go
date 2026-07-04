@@ -9,13 +9,21 @@ import (
 	"os"
 
 	"order-system/internal/events"
+	"order-system/internal/obs"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go/jetstream"
+	"go.opentelemetry.io/otel"
 )
 
 func main() {
 	ctx := context.Background()
+
+	if shutdown, err := obs.Init(ctx, "inventory"); err != nil {
+		log.Printf("otel: %v", err)
+	} else {
+		defer shutdown(ctx)
+	}
 
 	db, err := pgxpool.New(ctx, os.Getenv("DATABASE_URL"))
 	if err != nil {
@@ -49,6 +57,8 @@ func main() {
 	}
 
 	if _, err := cons.Consume(func(msg jetstream.Msg) {
+		mctx, span := otel.Tracer("inventory").Start(obs.Extract(context.Background(), msg), "inventory."+msg.Subject())
+		defer span.End()
 		var e struct {
 			OrderID string `json:"order_id"`
 			Item    string `json:"item"`
@@ -61,11 +71,11 @@ func main() {
 		}
 		switch msg.Subject() {
 		case events.SubjectOrderCreated:
-			reserve(ctx, db, js, e.OrderID, e.Item, e.Qty)
+			reserve(mctx, db, js, e.OrderID, e.Item, e.Qty)
 		case events.SubjectPaymentFailed:
-			release(ctx, db, e.OrderID) // compensation: give the stock back
+			release(mctx, db, e.OrderID) // compensation: give the stock back
 		case events.SubjectPaymentCompleted:
-			db.Exec(ctx, `DELETE FROM reservation WHERE order_id=$1`, e.OrderID) // reservation is now permanent
+			db.Exec(mctx, `DELETE FROM reservation WHERE order_id=$1`, e.OrderID) // reservation now permanent
 		}
 		msg.Ack()
 	}); err != nil {
@@ -85,7 +95,7 @@ func reserve(ctx context.Context, db *pgxpool.Pool, js jetstream.JetStream, orde
 		db.Exec(ctx, `INSERT INTO reservation(order_id,item,qty) VALUES($1,$2,$3)
 			ON CONFLICT DO NOTHING`, orderID, item, qty)
 		payload, _ := json.Marshal(events.InventoryReserved{OrderID: orderID, Item: item, Qty: qty})
-		js.Publish(ctx, events.SubjectInventoryReserved, payload)
+		obs.Publish(ctx, js, events.SubjectInventoryReserved, payload)
 		log.Printf("reserved %d x %s for %s", qty, item, orderID)
 		return
 	}
@@ -95,7 +105,7 @@ func reserve(ctx context.Context, db *pgxpool.Pool, js jetstream.JetStream, orde
 		log.Printf("reserve %s: %v", orderID, err)
 	}
 	payload, _ := json.Marshal(events.InventoryFailed{OrderID: orderID, Reason: reason})
-	js.Publish(ctx, events.SubjectInventoryFailed, payload)
+	obs.Publish(ctx, js, events.SubjectInventoryFailed, payload)
 	log.Printf("failed %s: %s", orderID, reason)
 }
 

@@ -8,12 +8,21 @@ import (
 	"log"
 
 	"order-system/internal/events"
+	"order-system/internal/obs"
 
 	"github.com/nats-io/nats.go/jetstream"
+	"go.opentelemetry.io/otel"
 )
 
 func main() {
 	ctx := context.Background()
+
+	if shutdown, err := obs.Init(ctx, "notification"); err != nil {
+		log.Printf("otel: %v", err)
+	} else {
+		defer shutdown(ctx)
+	}
+
 	js, err := events.Connect(ctx)
 	if err != nil {
 		log.Fatalf("nats: %v", err)
@@ -33,6 +42,8 @@ func main() {
 	}
 
 	if _, err := cons.Consume(func(msg jetstream.Msg) {
+		_, span := otel.Tracer("notification").Start(obs.Extract(context.Background(), msg), "notify")
+		defer span.End()
 		var e struct {
 			OrderID string `json:"order_id"`
 			Reason  string `json:"reason"`

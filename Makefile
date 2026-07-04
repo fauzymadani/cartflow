@@ -18,4 +18,8 @@ demo:
 test:
 	go build ./... && go vet ./... && go test ./...
 
-.PHONY: tf-up tf-down up demo test
+proto:   ## regenerate gRPC stubs from proto/order.proto
+	protoc --go_out=. --go_opt=module=order-system \
+	       --go-grpc_out=. --go-grpc_opt=module=order-system proto/order.proto
+
+.PHONY: tf-up tf-down up demo test proto

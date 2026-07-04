@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package order;
+option go_package = "order-system/proto;orderpb";
+
+// OrderService is the synchronous internal API the gateway calls. Everything
+// after order creation happens asynchronously over NATS.
+service OrderService {
+  rpc CreateOrder(CreateOrderRequest) returns (OrderResponse);
+  rpc GetOrder(GetOrderRequest) returns (OrderResponse);
+}
+
+message CreateOrderRequest {
+  string item = 1;
+  int32 qty = 2;
+}
+
+message GetOrderRequest {
+  string id = 1;
+}
+
+message OrderResponse {
+  string id = 1;
+  string item = 2;
+  int32 qty = 3;
+  string status = 4;
+}

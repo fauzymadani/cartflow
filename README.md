@@ -15,6 +15,8 @@ live-reload dev loop.
 ![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-425CC7?style=for-the-badge&logo=opentelemetry&logoColor=white)
 ![Jaeger](https://img.shields.io/badge/Jaeger-60D0E4?style=for-the-badge&logo=jaeger&logoColor=white)
 
+<p align="center"><img src="docs/architecture.svg" alt="CartFlow architecture" width="840"></p>
+
 ## Flow
 
 ```

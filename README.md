@@ -72,6 +72,8 @@ After `make demo`, open the Jaeger UI at **http://localhost:16686** and pick ser
 `order.settle`, plus `notify` — HTTP edge, gRPC call, and async NATS hops all stitched
 into a single trace.
 
+<p align="center"><img src="docs/trace.png" alt="One order traced across five services in Jaeger" width="840"></p>
+
 Manual:
 ```bash
 TOKEN=$(curl -s -XPOST localhost:8080/login -d '{"user":"demo","pass":"demo"}' | jq -r .token)
